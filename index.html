@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Quiz Game - Admin</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f2f5; }
+    .container { max-width: 800px; margin: auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    h2, h3 { color: #333; }
+    button { margin: 5px; padding: 10px 20px; cursor: pointer; border: none; border-radius: 5px; font-size: 16px; transition: background-color 0.3s; }
+    button:hover { opacity: 0.9; }
+    .start-btn { background-color: #28a745; color: white; }
+    .stop-btn { background-color: #dc3545; color: white; }
+    .reset-btn { background-color: #ffc107; color: #333; }
+    .ban-btn { background-color: #17a2b8; color: white; }
+    #admin-notification { padding: 10px; margin-bottom: 20px; background-color: #e2f9e4; border: 1px solid #c8e6c9; border-radius: 5px; color: #216a2b; font-weight: bold; }
+    .status-section { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    #players-list, #leaderboard { margin-top: 20px; }
+    .list-header { font-weight: bold; padding: 8px; background-color: #e9ecef; border-bottom: 2px solid #ccc; display: grid; grid-template-columns: 1fr 1fr 1fr 0.5fr; }
+    .list-item { padding: 8px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 1fr 1fr 1fr 0.5fr; align-items: center; }
+    .list-item:nth-child(odd) { background-color: #f9f9f9; }
+    #banInput { padding: 8px; border-radius: 5px; border: 1px solid #ccc; }
+    #bannedList { list-style-type: none; padding: 0; }
+    #bannedList li { background-color: #f8d7da; padding: 5px; margin-bottom: 5px; border-left: 3px solid #dc3545; }
+    .status-dot { height: 12px; width: 12px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; }
+    .online { background-color: #28a745; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h2>Admin Panel</h2>
+    
+    <div id="admin-notification"></div>
+
+    <div class="status-section">
+      <button onclick="startRound()" class="start-btn">Start Round</button>
+      <button onclick="stopRound()" class="stop-btn">Stop Round</button>
+      <button onclick="resetGame()" class="reset-btn">Reset Game</button>
+      <p>Connected Players: <span id="player-count">0</span></p>
+    </div>
+
+    <h3>Banned UIDs</h3>
+    <input type="text" id="banInput" placeholder="Enter UID to ban">
+    <button onclick="banUID()" class="ban-btn">Ban UID</button>
+    <ul id="bannedList"></ul>
+
+    <div id="players-list">
+      <h3>Active Players</h3>
+      <div class="list-header"><span>UID</span><span>Color</span><span>Score</span><span>Status</span></div>
+      <div id="players-list-body"></div>
+    </div>
+    
+    <div id="leaderboard">
+      <h3>Leaderboard</h3>
+      <div class="list-header"><span>Rank</span><span>UID</span><span>Score</span><span>Color</span></div>
+      <div id="leaderboard-body"></div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyB8hNeYCaCUDEb442816H7m5czjU_p7yvk",
+      authDomain: "space-nut.firebaseapp.com",
+      databaseURL: "https://space-nut-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "space-nut",
+      storageBucket: "space-nut.firebasestorage.app",
+      messagingSenderId: "361367330680",
+      appId: "1:361367330680:web:4feeea30968b766b2b328d"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const playersRef = db.ref('players');
+    const gameStatusRef = db.ref('gameStatus');
+
+    function startRound() {
+      gameStatusRef.set({ roundStarted: true });
+      alert("✅ Round started");
+    }
+
+    function stopRound() {
+      gameStatusRef.set({ roundStarted: false });
+      alert("⏹️ Round stopped");
+    }
+
+    function resetGame() {
+      playersRef.remove();
+      db.ref('bannedUIDs').remove();
+      gameStatusRef.set({ roundStarted: false });
+      alert("♻️ Game reset");
+    }
+
+    function banUID() {
+      const input = document.getElementById("banInput").value.trim();
+      if (!input) return alert("❌ Enter a UID to ban");
+      db.ref("bannedUIDs/" + input).set(true);
+      document.getElementById("banInput").value = "";
+    }
+
+    db.ref("bannedUIDs").on("value", snapshot => {
+      const banned = snapshot.val() || {};
+      let html = "";
+      Object.keys(banned).forEach(uid => {
+        html += `<li>${uid}</li>`;
+      });
+      document.getElementById("bannedList").innerHTML = html;
+    });
+
+    playersRef.on('value', snapshot => {
+      const players = snapshot.val() || {};
+      const playerCount = Object.keys(players).length;
+      document.getElementById('player-count').textContent = playerCount;
+
+      const playerListBody = document.getElementById('players-list-body');
+      playerListBody.innerHTML = ''; 
+      
+      const leaderboardBody = document.getElementById('leaderboard-body');
+      leaderboardBody.innerHTML = '';
+
+      const playersArray = Object.keys(players).map(uid => ({
+        uid: uid,
+        ...players[uid]
+      }));
+      
+      playersArray.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+      Object.values(players).forEach(player => {
+        const row = document.createElement('div');
+        row.className = 'list-item';
+        const statusClass = player.status === 'online' ? 'online' : '';
+        row.innerHTML = `<span>${player.uid}</span><span>${player.color}</span><span>${player.score || 0}</span><span class="status-dot ${statusClass}"></span>`;
+        playerListBody.appendChild(row);
+      });
+
+      playersArray.forEach((player, index) => {
+        const row = document.createElement('div');
+        row.className = 'list-item';
+        row.innerHTML = `<span>${index + 1}</span><span>${player.uid}</span><span>${player.score || 0}</span><span>${player.color}</span>`;
+        leaderboardBody.appendChild(row);
+      });
+    });
+  </script>
+</body>
+</html>
